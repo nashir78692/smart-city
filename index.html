@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart City</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;800&family=Noto+Sans+Devanagari:wght@400;600;800&family=Noto+Sans+Bengali:wght@400;600&family=Noto+Sans+Arabic:wght@400;600&family=Noto+Sans+SC:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://sdk.minepi.com/pi-sdk.js"></script>
+<style>
+:root{--bg:#f2f5f3;--ink:#12302b;--mute:#5b6f6a;--line:#cfdad6;--acc:#e8a317;--card:#fff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans","Noto Sans Devanagari","Noto Sans Bengali","Noto Sans Arabic","Noto Sans SC",system-ui,sans-serif;line-height:1.6}
+header{background:var(--ink);color:#fff;padding:24px 20px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+header h1{margin:0;font-size:1.8rem;font-weight:800}
+header p{margin:4px 0 14px;color:#b9cdc8}
+button,select{font:inherit}
+button{cursor:pointer}
+#lang{background:#1d443d;color:#fff;border:1px solid #6f8a84;border-radius:6px;padding:5px 8px;max-width:140px}
+#login{background:var(--acc);color:var(--ink);border:0;border-radius:6px;padding:11px 16px;font-weight:600}
+#who{font-weight:600}
+main{max-width:640px;margin:0 auto;padding:20px}
+#q{width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;font:inherit;margin-bottom:12px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tabs button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 14px;color:var(--ink)}
+.tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.item{background:var(--card);border-inline-start:5px solid var(--acc);padding:14px 16px;margin-bottom:12px;border-radius:8px}
+.item h3{margin:0;font-size:1.05rem}
+.item small{color:var(--mute)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:8px}
+.pay{border:1px solid var(--ink);background:none;border-radius:6px;padding:6px 12px;color:var(--ink)}
+#msg{margin:8px 0;color:#b5412a;min-height:1.5em}
+#more{margin-top:24px;color:var(--mute);font-size:.9rem}
+:focus-visible{outline:3px solid #1a73e8;outline-offset:2px}
+</style>
+</head>
+<body>
+<header>
+  <div class="top"><h1>Smart City</h1><select id="lang" aria-label="Language"></select></div>
+  <p id="sub"></p>
+  <button id="login"></button><span id="who"></span>
+</header>
+<main>
+  <input id="q">
+  <div class="tabs" id="tabs"></div>
+  <div id="msg"></div>
+  <div id="list"></div>
+  <div id="more"><span id="moretxt"></span><div id="gt"></div></div>
+</main>
+<script>
+// For testing, use: Pi.init({ version: "2.0", sandbox: true })
+try { Pi.init({ version: "2.0" }); } catch (e) {}
+const $ = id => document.getElementById(id);
+let user = null, cur = "all";
+
+// Order of fields in each language:
+// sub, login, search, all, pay, hello, needLogin, noPi, cancel, err, empty, more, transport, food, help, stay
+const L = {
+ en:["English","Local services in every city, paid with Pi","Sign in with Pi","Search city or service…","All","Pay with Pi","Hello, ","Please sign in with Pi before paying.","Sign-in failed. Open this page in Pi Browser.","Payment cancelled.","Payment error: ","No results. Try another city or service.","Need another language? Use this:","Transport","Food","Help","Stay"],
+ hi:["हिन्दी","हर शहर की स्थानीय सेवाएँ, Pi से भुगतान","Pi से साइन इन करें","शहर या सेवा खोजें…","सभी","Pi से भुगतान","नमस्ते, ","भुगतान से पहले Pi से साइन इन करें।","साइन इन नहीं हुआ। इस पेज को Pi Browser में खोलें।","पेमेंट रद्द किया गया।","पेमेंट में त्रुटि: ","कोई परिणाम नहीं। दूसरा शहर या सेवा खोजें।","दूसरी भाषा चाहिए? यहाँ चुनें:","परिवहन","भोजन","सहायता","ठहरना"],
+ es:["Español","Servicios locales en cada ciudad, con pago en Pi","Iniciar sesión con Pi","Buscar ciudad o servicio…","Todo","Pagar con Pi","Hola, ","Inicia sesión con Pi antes de pagar.","No se pudo iniciar sesión. Abre esta página en Pi Browser.","Pago cancelado.","Error de pago: ","Sin resultados. Prueba otra ciudad o servicio.","¿Otro idioma? Usa esto:","Transporte","Comida","Ayuda","Alojamiento"],
+ fr:["Français","Services locaux dans chaque ville, payés en Pi","Se connecter avec Pi","Rechercher une ville ou un service…","Tout","Payer avec Pi","Bonjour, ","Connectez-vous avec Pi avant de payer.","Échec de la connexion. Ouvrez cette page dans Pi Browser.","Paiement annulé.","Erreur de paiement : ","Aucun résultat. Essayez une autre ville ou un autre service.","Une autre langue ? Utilisez ceci :","Transport","Repas","Aide","Hébergement"],
+ ar:["العربية","خدمات محلية في كل مدينة، الدفع عبر Pi","تسجيل الدخول عبر Pi","ابحث عن مدينة أو خدمة…","الكل","ادفع عبر Pi","مرحباً، ","سجّل الدخول عبر Pi قبل الدفع.","فشل تسجيل الدخول. افتح هذه الصفحة في Pi Browser.","تم إلغاء الدفع.","خطأ في الدفع: ","لا نتائج. جرّب مدينة أو خدمة أخرى.","تحتاج لغة أخرى؟ استخدم هذا:","نقل","طعام","مساعدة","إقامة"],
+ pt:["Português","Serviços locais em todas as cidades, pagos com Pi","Entrar com Pi","Buscar cidade ou serviço…","Tudo","Pagar com Pi","Olá, ","Entre com Pi antes de pagar.","Falha ao entrar. Abra esta página no Pi Browser.","Pagamento cancelado.","Erro no pagamento: ","Sem resultados. Tente outra cidade ou serviço.","Precisa de outro idioma? Use isto:","Transporte","Comida","Ajuda","Hospedagem"],
+ bn:["বাংলা","প্রতিটি শহরের স্থানীয় সেবা, Pi দিয়ে পেমেন্ট","Pi দিয়ে সাইন ইন করুন","শহর বা সেবা খুঁজুন…","সব","Pi দিয়ে পেমেন্ট","হ্যালো, ","পেমেন্টের আগে Pi দিয়ে সাইন ইন করুন।","সাইন ইন হয়নি। এই পেজটি Pi Browser-এ খুলুন।","পেমেন্ট বাতিল হয়েছে।","পেমেন্টে ত্রুটি: ","কোনো ফলাফল নেই। অন্য শহর বা সেবা চেষ্টা করুন।","অন্য ভাষা দরকার? এটি ব্যবহার করুন:","পরিবহন","খাবার","সহায়তা","থাকা"],
+ id:["Bahasa Indonesia","Layanan lokal di setiap kota, bayar dengan Pi","Masuk dengan Pi","Cari kota atau layanan…","Semua","Bayar dengan Pi","Halo, ","Masuk dengan Pi sebelum membayar.","Gagal masuk. Buka halaman ini di Pi Browser.","Pembayaran dibatalkan.","Kesalahan pembayaran: ","Tidak ada hasil. Coba kota atau layanan lain.","Perlu bahasa lain? Gunakan ini:","Transportasi","Makanan","Bantuan","Penginapan"],
+ ru:["Русский","Местные услуги в любом городе с оплатой в Pi","Войти через Pi","Найти город или услугу…","Все","Оплатить через Pi","Здравствуйте, ","Войдите через Pi перед оплатой.","Не удалось войти. Откройте страницу в Pi Browser.","Платёж отменён.","Ошибка платежа: ","Ничего не найдено. Попробуйте другой город или услугу.","Нужен другой язык? Используйте это:","Транспорт","Еда","Помощь","Жильё"],
+ zh:["中文","每座城市的本地服务，使用 Pi 支付","使用 Pi 登录","搜索城市或服务…","全部","使用 Pi 支付","你好，","付款前请先使用 Pi 登录。","登录失败。请在 Pi Browser 中打开此页面。","付款已取消。","付款错误：","没有结果。请尝试其他城市或服务。","需要其他语言？请使用此处：","交通","美食","帮助","住宿"]
+};
+const K = ["name","sub","login","search","all","pay","hello","needLogin","noPi","cancel","err","empty","more","transport","food","help","stay"];
+let lang = (navigator.language || "en").slice(0,2).toLowerCase();
+if (!L[lang]) lang = "en";
+const t = k => L[lang][K.indexOf(k)];
+
+// Sample listings from around the world. Replace with your real services.
+const items = [
+  {id:1, cat:"transport", name:"E-rickshaw ride", city:"Bokaro, India", pi:0.05},
+  {id:2, cat:"transport", name:"Airport pickup", city:"Dubai, UAE", pi:0.30},
+  {id:3, cat:"food", name:"Home-cooked lunch box", city:"Dhaka, Bangladesh", pi:0.10},
+  {id:4, cat:"food", name:"Street food tour", city:"Bangkok, Thailand", pi:0.25},
+  {id:5, cat:"help", name:"Phone repair", city:"Lagos, Nigeria", pi:0.15},
+  {id:6, cat:"help", name:"Form-filling assistance", city:"Manila, Philippines", pi:0.05},
+  {id:7, cat:"stay", name:"Guest room, 1 night", city:"Istanbul, Turkey", pi:0.50}
+];
+const cats = ["all","transport","food","help","stay"];
+
+async function onIncompletePaymentFound(payment) { console.log("Incomplete payment:", payment); }
+
+$("login").onclick = async () => {
+  try {
+    const auth = await Pi.authenticate(["username","payments"], onIncompletePaymentFound);
+    user = auth.user; $("msg").textContent = ""; ui();
+  } catch (e) { $("msg").textContent = t("noPi"); }
+};
+
+function pay(i) {
+  if (!user) { $("msg").textContent = t("needLogin"); return; }
+  const post = (u, b) => fetch(u, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b)});
+  Pi.createPayment({ amount:i.pi, memo:i.name, metadata:{itemId:i.id} }, {
+    onReadyForServerApproval: id => post("/api/approve", {paymentId:id}),
+    onReadyForServerCompletion: (id, txid) => post("/api/complete", {paymentId:id, txid}),
+    onCancel: () => { $("msg").textContent = t("cancel"); },
+    onError: e => { $("msg").textContent = t("err") + e.message; }
+  });
+}
+
+Object.keys(L).forEach(c => {
+  const o = document.createElement("option");
+  o.value = c; o.textContent = L[c][0];
+  $("lang").appendChild(o);
+});
+$("lang").onchange = e => { lang = e.target.value; ui(); };
+$("q").oninput = render;
+
+function ui() {
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  $("lang").value = lang;
+  $("sub").textContent = t("sub");
+  $("q").placeholder = t("search");
+  $("login").textContent = t("login");
+  $("login").style.display = user ? "none" : "";
+  $("who").textContent = user ? t("hello") + user.username : "";
+  $("moretxt").textContent = t("more");
+  render();
+}
+
+function render() {
+  $("tabs").innerHTML = "";
+  cats.forEach(c => {
+    const b = document.createElement("button");
+    b.textContent = t(c);
+    if (c === cur) b.className = "on";
+    b.onclick = () => { cur = c; render(); };
+    $("tabs").appendChild(b);
+  });
+  const q = $("q").value.trim().toLowerCase();
+  const rows = items.filter(i => (cur === "all" || i.cat === cur) && (i.city + i.name).toLowerCase().includes(q));
+  $("list").innerHTML = "";
+  if (!rows.length) { const p = document.createElement("p"); p.textContent = t("empty"); $("list").appendChild(p); }
+  rows.forEach(i => {
+    const d = document.createElement("div");
+    d.className = "item";
+    d.innerHTML = `<h3></h3><small></small><div class="row"><strong>${i.pi} π</strong><button class="pay"></button></div>`;
+    d.querySelector("h3").textContent = i.name;
+    d.querySelector("small").textContent = t(i.cat) + " · " + i.city;
+    const b = d.querySelector(".pay");
+    b.textContent = t("pay");
+    b.onclick = () => pay(i);
+    $("list").appendChild(d);
+  });
+}
+ui();
+
+// Google Translate widget: 100+ more languages (also translates service names)
+function gtInit() { new google.translate.TranslateElement({pageLanguage:"en", autoDisplay:false}, "gt"); }
+</script>
+<script src="https://translate.google.com/translate_a/element.js?cb=gtInit"></script>
+</body>
+  </html>
